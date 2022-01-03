@@ -22,6 +22,7 @@ import numpy as np
 from time import time
 from scipy import signal, interpolate
 import matplotlib.pylab as plt
+import soundfile as sf
 import glob
 
 from ..log import debug
@@ -97,15 +98,19 @@ def get_fir(
 
     matching_fft_filtered = __smooth_exponentially(matching_fft, config)
 
+    fir = np.fft.irfft(matching_fft_filtered)
+    fir = np.fft.ifftshift(fir) * signal.windows.hann(len(fir))
+
     if name == 'mid':
         plt.semilogx(reference_freqs, 10 * np.log10(matching_fft_filtered))
+        plt.grid(True, which='major')
+        plt.grid(True, which='minor')
         existing_files = sorted(glob.glob('eq-match-plot-*.png'))
         index = len(existing_files)
         plt.savefig(f'eq-match-plot-{index}.png')
         plt.close()
 
-    fir = np.fft.irfft(matching_fft_filtered)
-    fir = np.fft.ifftshift(fir) * signal.windows.hann(len(fir))
+        sf.write(f'eq-match-fir-{index}.wav', fir, config.internal_sample_rate, "PCM_24")
 
     return fir
 
