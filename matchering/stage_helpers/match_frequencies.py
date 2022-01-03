@@ -21,6 +21,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 import numpy as np
 from time import time
 from scipy import signal, interpolate
+import matplotlib.pylab as plt
+import glob
 
 from ..log import debug
 from .. import Config
@@ -30,7 +32,7 @@ from ..dsp import ms_to_lr, smooth_lowess
 def __average_fft(
     loudest_pieces: np.ndarray, sample_rate: int, fft_size: int
 ) -> np.ndarray:
-    *_, specs = signal.stft(
+    freqs, _, specs = signal.stft(
         loudest_pieces,
         sample_rate,
         window="boxcar",
@@ -39,7 +41,7 @@ def __average_fft(
         boundary=None,
         padded=False,
     )
-    return np.abs(specs).mean((0, 2))
+    return np.abs(specs).mean((0, 2)), freqs
 
 
 def __smooth_exponentially(matching_fft: np.ndarray, config: Config) -> np.ndarray:
@@ -83,10 +85,10 @@ def get_fir(
 ) -> np.ndarray:
     debug(f"Calculating the {name} FIR for the matching EQ...")
 
-    target_average_fft = __average_fft(
+    target_average_fft, target_freqs = __average_fft(
         target_loudest_pieces, config.internal_sample_rate, config.fft_size
     )
-    reference_average_fft = __average_fft(
+    reference_average_fft, reference_freqs = __average_fft(
         reference_loudest_pieces, config.internal_sample_rate, config.fft_size
     )
 
@@ -94,6 +96,13 @@ def get_fir(
     matching_fft = reference_average_fft / target_average_fft
 
     matching_fft_filtered = __smooth_exponentially(matching_fft, config)
+
+    if name == 'mid':
+        plt.semilogx(reference_freqs, 10 * np.log10(matching_fft_filtered))
+        existing_files = sorted(glob.glob('eq-match-plot-*.png'))
+        index = len(existing_files)
+        plt.savefig(f'eq-match-plot-{index}.png')
+        plt.close()
 
     fir = np.fft.irfft(matching_fft_filtered)
     fir = np.fft.ifftshift(fir) * signal.windows.hann(len(fir))
